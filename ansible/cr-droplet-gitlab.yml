@@ -176,22 +176,6 @@
       with_items:
           - gitlab-ce
 
-
-    - name: edit /etc/gitlab/gitlab.rb
-      lineinfile: 
-           dest: /etc/gitlab/gitlab.rb
-           state: present 
-           regexp: "^external_url"
-           line: "external_url '{{gitlab_DNS_p}}.{{L3_DNS}}'"           
-
-    - name: edit /etc/gitlab/gitlab.rb
-      lineinfile: 
-           dest: /etc/gitlab/gitlab.rb
-           state: present 
-           regexp: "^#?registry_external_url"
-           line: "registry_external_url '{{gitlab_DNS_p}}.{{L3_DNS}}:5000'"           
-
-
     - name: edit /etc/gitlab/gitlab.rb
       lineinfile: 
            dest: /etc/gitlab/gitlab.rb
@@ -199,25 +183,28 @@
            regexp: "{{ item.regexp }}"
            line: "{{ item.line }}"           
       with_items: 
-         - regexp: "^#?registry_external_url"
-           line: "registry_external_url 'https://gitlab.pic16f874.pp.ua:5000'"
+         - regexp: "^#? ?external_url"
+           line: "external_url 'https://{{gitlab_DNS_p}}.{{L3_DNS}}'"
 
-         - regexp: "^#?gitlab_rails['registry_enabled']"
+         - regexp: "^#? ?registry_external_url"
+           line: "registry_external_url 'https://{{gitlab_DNS_p}}.{{L3_DNS}}:5005'"
+
+         - regexp: "^#? ?gitlab_rails['registry_enabled']"
            line: "gitlab_rails['registry_enabled'] = true"
-         - regexp: "^#?gitlab_rails['registry_host']"
-           line: "gitlab_rails['registry_host'] = {{gitlab_DNS_p}}.{{L3_DNS}}"
-         - regexp: "^#?gitlab_rails['registry_port']"
-           line: "gitlab_rails['registry_port'] = '5000'"
-         - regexp: "^#?gitlab_rails['registry_path']"
+         - regexp: "^#? ?gitlab_rails['registry_host']"
+           line: "gitlab_rails['registry_host'] = '{{gitlab_DNS_p}}.{{L3_DNS}}'"
+         - regexp: "^#? ?gitlab_rails['registry_port']"
+           line: "gitlab_rails['registry_port'] = '5005'"
+         - regexp: "^#? ?gitlab_rails['registry_path']"
            line: "gitlab_rails['registry_path'] = '/var/opt/gitlab/gitlab-rails/shared/registry'"
 
-         - regexp: "^#?gitlab_rails['registry_api_url']"
+         - regexp: "^#? ?gitlab_rails['registry_api_url']"
            line: "gitlab_rails['registry_api_url'] = 'http://localhost:5000'"
-         - regexp: "^#?gitlab_rails['registry_key_path']"
+         - regexp: "^#? ?gitlab_rails['registry_key_path']"
            line: "gitlab_rails['registry_key_path'] = '/var/opt/gitlab/gitlab-rails/certificate.key'"
-         - regexp: "^#?gitlab_rails['registry_issuer']"
+         - regexp: "^#? ?gitlab_rails['registry_issuer']"
            line: "gitlab_rails['registry_issuer'] = 'omnibus-gitlab-issuer'"
-#         - regexp: "^#?"
+#         - regexp: "^#? ?"
 #           line: ""
 
 
