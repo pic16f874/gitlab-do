@@ -1,5 +1,6 @@
-ansible-playbook cr-droplet.yml \--ask-vault-pass
-ansible-playbook cr-droplet.yml \--vault-password-file pass-ansible.txt
+ansible-playbook cr-droplet-gitlab.yml \--ask-vault-pass
+ansible-playbook cr-droplet-gitlab.yml \--vault-password-file datainfo.retry
+
 
 
 
