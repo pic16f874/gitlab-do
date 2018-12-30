@@ -1,0 +1,459 @@
+- hosts: localhost
+  gather_facts: false
+  vars:
+    dodropletname: "gl-runner-test"
+  tasks:
+    - name: add ssh key into digital-ocean 
+      digital_ocean:
+            state: present
+            command: ssh
+            name: netbook
+            ssh_pub_key: "{{ sshpublickey }}"
+            api_token: "{{ doapitoken }}"
+      register: my_key
+
+#    - debug:
+#        msg: "{{ my_key }}"
+#    - debug:
+#        msg: "{{ my_key.ssh_key.id }}"
+
+    - name: add digital-ocean droplet 
+      digital_ocean:
+            state: present
+            command: droplet
+            name: "{{ dodropletname }}"
+            unique_name: yes
+            api_token: "{{ doapitoken }}"
+            region_id: "{{ doregion }}"
+            ssh_key_ids: "{{ my_key.ssh_key.id }}"
+            image_id: Ubuntu-18-04-x64
+            size_id: s-1vcpu-1gb
+#            size_id: s-1vcpu-3gb
+#            size_id: s-2vcpu-4gb
+#            image_id: gitlab-18-04
+            wait_timeout: 500
+      register: my_droplet
+
+    - name: print digital-ocean droplet info 
+      debug:
+        msg: "ID is {{ my_droplet.droplet.id }} IP is {{ my_droplet.droplet.ip_address }}"
+
+    - name: 
+      digital_ocean_domain:
+        oauth_token: "{{ doapitoken }}"
+        state: present
+        name: "{{ my_droplet.droplet.name }}.{{L3_DNS}}"
+        ip: "{{ my_droplet.droplet.ip_address }}"
+
+    - name: create DO volume 
+      digital_ocean_block_storage:
+        state: present
+        command: create
+        api_token: "{{ doapitoken }}"
+        region: "{{ doregion }}"
+        block_size: 10
+        volume_name: "{{ dodropletname }}-vol"
+
+    - name: attact DO volume 
+      digital_ocean_block_storage:
+        state: present
+        command: attach
+        api_token: "{{ doapitoken }}"
+        volume_name: "{{ dodropletname }}-vol"
+        region: "{{ doregion }}"
+        droplet_id: "{{ my_droplet.droplet.id }}"
+
+
+    - name: Add new droplet into ansible-playbook_in-memory inventory [host,group]
+      add_host: 
+         name: "{{ my_droplet.droplet.ip_address }}"
+         groups: "launched"
+         do_droplet_id: "{{ my_droplet.droplet.id }}"
+         do_droplet_ip: "{{ my_droplet.droplet.ip_address }}"
+         do_droplet_name: "{{ my_droplet.droplet.name }}"
+         ansible_user: "root"
+         ansible_ssh_common_args: "-oStrictHostKeyChecking=no"
+         ansible_host_key_checking: False
+         ansible_python_interpreter: python3
+         #ansible_python_interpreter=/usr/bin/python3
+    - name: Wait for SSH to come up
+      local_action: wait_for host={{ my_droplet.droplet.ip_address }} port=22 delay=60 timeout=320 state=started           
+
+
+
+#from here https://gist.github.com/rdhyee/7047660
+
+- hosts: "launched"
+  gather_facts: false
+
+  handlers:
+    - name: "Restart sshd"
+      service:
+        name: "sshd"
+        state: "restarted"
+    - name: "Restart docker"
+      service:
+        name: "docker"
+        state: "restarted"
+
+
+
+  tasks:
+    - name: Ensure group kanoadmins exists
+      group:
+        name: "{{ admin_group_name }}"
+        state: present
+
+#    - name: "Allow admin users to sudo without a password"
+#      lineinfile:
+#        dest: "/etc/sudoers" # path: in version 2.3
+#        state: "present"
+#        regexp: "^%admin"
+#        line: "%admin ALL=(ALL) NOPASSWD: ALL"
+
+    - name: "Allow admin users to sudo without a password"
+      lineinfile:
+        dest: "/etc/sudoers.d/kanoadm"
+        state: "present"
+        create: yes
+        insertbefore: BOF
+        line: "%{{ admin_group_name }} ALL=(ALL) NOPASSWD: ALL"
+        validate: '/usr/sbin/visudo -cf %s'
+
+    - name: Create user which have admin privileges
+      user:
+        name: "{{ item.username }}"
+        shell: "{{ item.shell }}"
+        groups: "{{ item.groups }}"  
+        append: yes
+      with_items: "{{ admin_users }}"
+
+    - name: "Add authorized keys"
+      authorized_key:
+        user: "{{ item.username }}"
+        key: "{{ sshpublickey }}"
+      with_items: "{{ admin_users }}"
+
+#Now we are managing adding and removing users to the server we can improve security by disabling root logins via ssh. 
+#Using lineinfile we will update /etc/ssh/config
+#Handlers have two important traits: They at the end of the playbook only run if notified, 
+#and they run only once no matter how many times they are notified.
+
+#    - name: "Disable root login via SSH"
+#      lineinfile:
+#         dest: "/etc/ssh/sshd_config"
+#         regexp: "^PermitRootLogin"
+#         line: "PermitRootLogin no"
+#      notify: "Restart sshd"
+
+
+    - name: "create the file to be used for swap" 
+      command: fallocate -l 4G /mnt/4GB.swap
+#      command: sudo dd if=/dev/zero of=./4GB.swap bs=4096 count=1048576
+    - name: format the file for swap
+      command: mkswap /mnt/4GB.swap
+    - name: change swap file permissions
+      file: path=/mnt/4GB.swap owner=root group=root mode=0600
+    - name: add the file to the system as a swap file
+      command: swapon /mnt/4GB.swap
+    - name: write swap entry in fstab
+      mount: name=none src=/mnt/4GB.swap fstype=swap opts=sw passno=0 dump=0 state=present
+
+    - name: Create LVM volume group
+      lvg:
+         pvs: /dev/sda
+         state: present
+         vg: "{{ docker_vg_name }}"
+
+    - name: Create a logical volume
+      lvol:
+         vg: "{{ docker_vg_name }}"
+         thinpool: "{{ thin_pool_name }}"
+         size: 95%VG
+         pvs: /dev/sda
+         opts: "--wipesignatures y"
+
+    - name: Create a logical volume
+      lvol:
+         vg: "{{ docker_vg_name }}"
+         thinpool: "{{ thin_pool_name }}meta"
+         size: 1%VG
+         pvs: /dev/sda
+         opts: "--wipesignatures y"
+
+    - name: "Edit /etc/lvm/profile/docker-thinpool.profile"
+      lineinfile:
+        dest: "/etc/lvm/profile/{{ docker_vg_name }}-{{ thin_pool_name }}.profile"
+        state: "present"
+        create: yes
+        insertbefore: BOF
+        line: "activation { thin_pool_autoextend_threshold=80 thin_pool_autoextend_percent=20 }"
+
+    - name: "Edit /etc/docker/daemon.json"
+      lineinfile:
+        dest: "/etc/docker/daemon.json"
+        state: "present"
+        create: yes
+        insertbefore: BOF
+        line: |
+            { "storage-driver": "devicemapper", 
+            "storage-opts": [ "dm.thinpooldev=/dev/mapper/{{ docker_vg_name }}-{{ thin_pool_name }}",
+            "dm.use_deferred_removal=true", "dm.use_deferred_deletion=true" ] }"
+      notify: "Restart docker"
+
+    - name: "lvs -o+seg_monitor"
+      become: yes
+      shell: "{{ item }}"
+      with_items:
+        - "lvchange --metadataprofile {{ docker_vg_name }}-{{ thin_pool_name }} {{ docker_vg_name }}/{{ thin_pool_name }}"
+        - "lvs -o+seg_monitor"
+      register: lvs_mon
+    - name: Print result of cat downloaded script
+      debug:
+        msg:
+          - "{{ lvs_mon.results[0].stdout_lines }}"
+          - "{{ lvs_mon.results[1].stdout_lines }}"
+
+#docker_vg_name: "DockerVgName"
+#thin_pool_name: "ThinPoolName"
+
+# echo "activation { thin_pool_autoextend_threshold=80 thin_pool_autoextend_percent=20 }" >  /etc/lvm/profile/docker-thinpool.profile
+#sudo lvchange --metadataprofile docker-thinpool docker/thinpool
+# lvs -o+seg_monitor
+#echo "{ \"storage-driver\": \"devicemapper\", \"storage-opts\": [ \"dm.thinpooldev=/dev/mapper/docker-thinpool\", \"dm.use_deferred_removal=true\", \"dm.use_deferred_deletion=true\" ] }" 
+#sudo cp daemon.json /etc/docker/daemon.json
+
+    - name: "update apt cache"
+      become: true
+      apt:
+        update_cache: yes
+        cache_valid_time: 86400 #One day
+
+    - name: "install packages "
+      become: true
+      apt:
+        pkg: "{{item}}"
+        state: present
+      with_items:
+          - docker
+          - docker-compose
+          - thin-provisioning-tools
+          - lvm2
+          - ca-certificates
+          - openssh-server
+          - postfix
+          - curl
+          - mc
+          - python3-pip
+
+    - name: "install python packages "
+      become: true
+      pip:
+        name: "{{item}}"
+        state: present
+      with_items:
+          - dopy
+          
+    - name: "download gitlab installation script "
+      get_url: 
+          url: "https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh"
+          dest: /tmp
+          mode: 0744
+    - name: "cat downloaded script"
+      shell: "{{ item }}"
+      with_items:
+        - "cat /tmp/script.deb.sh"
+      register: cat_script
+    - name: Print result of cat downloaded script
+      debug:
+        msg:
+          - "{{ cat_script.results[0].stdout_lines }}"
+
+    - name: "RUN gitlab installation script"
+      become: true
+      shell: "{{ item }}"
+      with_items:
+        - "/tmp/script.deb.sh" 
+      register: res_script
+
+    - name: Print result of RUN gitlab installation script
+      debug:
+        msg:
+          - "{{ res_script.results[0].stdout_lines }}"
+
+
+    - name: "install gitlab"
+      become: true
+      apt:
+        pkg: "{{item}}"
+        state: present
+      with_items:
+          - gitlab-runner
+
+#    - name: "REGISTER gitlab runner"
+#      become: true
+#      shell: "{{ item }}"       
+#      with_items:
+#        - | 
+#          gitlab-runner register \
+#          --non-interactive \
+#          --url "https:{{L3_DNS}}.{{gitlab_DNS_p}}" \
+#          --registration-token "{{gitlab_PROJECT_REGISTRATION_TOKEN}}" \
+#          --executor "docker" \
+#          --docker-image alpine:3 \
+#          --description "docker-runner" \
+#          --tag-list "docker,aws" \
+#          --run-untagged \
+#          --locked="false" \
+#      register: res_recfg
+#
+#    - name: Print result of RUN gitlab installation script
+#      debug:
+#        msg:
+#          - "{{ res_recfg.results[0].stdout_lines }}"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# 2DO run Certbot
+
+
+
+
+
+
+
+
+#    - name: "download zabbix metapackage {{ zbx_repo_pckg }}"
+#      get_url: 
+#          url: "{{ zbx_repo_path }}{{ zbx_repo_pckg }}"
+#          dest: /tmp
+          
+#    - name: "install zabbix metapackage {{ zbx_repo_pckg }}"
+#      become: true
+#      apt: 
+#        deb: "/tmp/{{ zbx_repo_pckg }}" 
+          
+#    - name: "update apt cache"
+#      become: true
+#      apt:
+#        update_cache: yes
+#        cache_valid_time: 86400 #One day
+
+#    - name: "install zabbix packages {{ zbx_repo_pckg }}"
+#      become: true
+#      apt:
+#        pkg: "{{item}}"
+#        state: present
+#      with_items:
+#          - zabbix-server-mysql
+#          - zabbix-frontend-php 
+#          - zabbix-agent 
+
+#    - name: "install zabbix packages"
+#      become: true
+#      apt:
+#        pkg: "{{item}}"
+#        state: present
+#      with_items:
+#          - zabbix-server-mysql
+#          - zabbix-frontend-php 
+#          - zabbix-agent 
+#          - python-pip
+
+#    - name: "pip install MySQL-python module"
+#      pip: 
+#        name: "{{item}}"
+#      with_items:
+#          - MySQLdb
+#          - PyMySQL
+
+#    - name: "create mysql zabbix db"
+#      become: true
+#      mysql_db:
+#        name: zabbix
+#        state: present
+#        encoding: utf8
+#        collation: utf8_bin
+
+#    - name: "create mysql zabbix user"
+#      become: true
+#      mysql_user:
+#        name: zabbix
+#        password: zabbix
+#        priv: '*.*:ALL'
+#        state: present
+
+
+- hosts: "launched"
+  gather_facts: true
+  tasks:
+    - name: DROP ALL or CANCEL
+      pause:
+        prompt: " ****************************************************\n
+                *   Destroy droplet, volume, dns record            *\n
+                ****************************************************\n
+                 \n
+                 Press '[Enter]' to continue or '[Ctrl + c]' then 'a' to abort"
+
+    - name: DELETE dns record
+      digital_ocean_domain:
+        state: absent
+        oauth_token: "{{ doapitoken }}"
+        name: "{{ do_droplet_name }}.{{L3_DNS}}"
+        ip: "{{ do_droplet_ip }}"
+
+    - name: DETACH DO volume 
+      digital_ocean_block_storage:
+        state: absent
+        command: attach
+        api_token: "{{ doapitoken }}"
+        volume_name: "{{ do_droplet_name }}-vol"
+        region: "{{ doregion }}"
+        droplet_id: "{{ do_droplet_id }}"
+
+    - name: DROP DO volume 
+      digital_ocean_block_storage:
+        state: absent
+        command: create
+        api_token: "{{ doapitoken }}"
+        region: "{{ doregion }}"
+        volume_name: "{{ do_droplet_name }}-vol"
+
+    - name: DROP digital-ocean droplet 
+      digital_ocean:
+            state: absent
+            command: droplet
+#            name: "{{ do_droplet_name }}"
+            droplet_id: "{{ do_droplet_id }}"
+            api_token: "{{ doapitoken }}"
+#            region_id: "{{ doregion }}"
+#            image_id: Ubuntu-18-04-x64
+#            size_id: s-1vcpu-1gb
+            wait_timeout: 500
+#      register: my_droplet
+
+#            droplet_id: "{{ do_droplet_id }}"
+
+    - name: sample loop on inventory group
+      debug:
+        msg: 
+         - "droplet NAME {{ hostvars[item].do_droplet_name }}"
+         - "droplet  ID  {{ hostvars[item].do_droplet_id }}"
+         - "droplet  IP  {{ hostvars[item].do_droplet_ip }}"
+      with_items: "{{ groups['launched'] }}"
+
+
+
+
