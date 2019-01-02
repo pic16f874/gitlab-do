@@ -38,12 +38,12 @@
       debug:
         msg: "ID is {{ my_droplet.droplet.id }} IP is {{ my_droplet.droplet.ip_address }}"
 
-    - name: 
-      digital_ocean_domain:
-        oauth_token: "{{ doapitoken }}"
-        state: present
-        name: "{{ my_droplet.droplet.name }}.{{L3_DNS}}"
-        ip: "{{ my_droplet.droplet.ip_address }}"
+#    - name: 
+#      digital_ocean_domain:
+#        oauth_token: "{{ doapitoken }}"
+#        state: present
+#        name: "{{ my_droplet.droplet.name }}.{{L3_DNS}}"
+#        ip: "{{ my_droplet.droplet.ip_address }}"
 
     - name: create DO volume 
       digital_ocean_block_storage:
@@ -95,8 +95,6 @@
       service:
         name: "docker"
         state: "restarted"
-
-
 
   tasks:
     - name: Ensure group kanoadmins exists
@@ -295,29 +293,36 @@
 #      shell: "{{ item }}"       
 #      with_items:
 #        - | 
-#          gitlab-runner register \
+#          "gitlab-runner register \
 #          --non-interactive \
-#          --url "https:{{L3_DNS}}.{{gitlab_DNS_p}}" \
+#          --url "https://gitlab.{{L3_DNS}}" \
 #          --registration-token "{{gitlab_PROJECT_REGISTRATION_TOKEN}}" \
 #          --executor "docker" \
-#          --docker-image alpine:3 \
+#         --docker-image alpine:3 \
 #          --description "docker-runner" \
 #          --tag-list "docker,aws" \
 #          --run-untagged \
-#          --locked="false" \
+#          --locked="false" "
 #      register: res_recfg
-#
+
 #    - name: Print result of RUN gitlab installation script
 #      debug:
 #        msg:
 #          - "{{ res_recfg.results[0].stdout_lines }}"
 
 
+    - name: "REGISTER gitlab runner"
+      become: true
+      shell: "{{ item }}"       
+      with_items:
+        - | 
+          gitlab-runner register --non-interactive --url "https://gitlab.{{L3_DNS}}" --registration-token "{{gitlab_PROJECT_REGISTRATION_TOKEN}}" --executor "shell" --description "shell-runner" --run-untagged --locked="false"
+      register: res_recfg
 
-
-
-
-
+    - name: Print result of RUN gitlab installation script
+      debug:
+        msg:
+          - "{{ res_recfg.results[0].stdout_lines }}"
 
 
 
@@ -407,12 +412,12 @@
                  \n
                  Press '[Enter]' to continue or '[Ctrl + c]' then 'a' to abort"
 
-    - name: DELETE dns record
-      digital_ocean_domain:
-        state: absent
-        oauth_token: "{{ doapitoken }}"
-        name: "{{ do_droplet_name }}.{{L3_DNS}}"
-        ip: "{{ do_droplet_ip }}"
+#    - name: DELETE dns record
+#      digital_ocean_domain:
+#        state: absent
+#        oauth_token: "{{ doapitoken }}"
+#        name: "{{ do_droplet_name }}.{{L3_DNS}}"
+#        ip: "{{ do_droplet_ip }}"
 
     - name: DETACH DO volume 
       digital_ocean_block_storage:

@@ -1,5 +1,7 @@
 - hosts: localhost
   gather_facts: false
+  vars:
+    dodropletname: "gitlab"
 
   tasks:
     - name: add ssh key into digital-ocean 
@@ -20,9 +22,10 @@
       digital_ocean:
             state: present
             command: droplet
-            name: gitlab-test
+            name: "{{ dodropletname }}"
+            unique_name: yes
             api_token: "{{ doapitoken }}"
-            region_id: fra1
+            region_id: "{{ doregion }}"
             ssh_key_ids: "{{ my_key.ssh_key.id }}"
             image_id: Ubuntu-18-04-x64
 #            size_id: s-1vcpu-3gb
@@ -35,10 +38,20 @@
       debug:
         msg: "ID is {{ my_droplet.droplet.id }} IP is {{ my_droplet.droplet.ip_address }}"
 
+#    - name: 
+#      digital_ocean_domain:
+#        oauth_token: "{{ doapitoken }}"
+#        state: present
+#        name: "{{ my_droplet.droplet.name }}.{{L3_DNS}}"
+#        ip: "{{ my_droplet.droplet.ip_address }}"
+
     - name: Add new droplet into ansible-playbook_in-memory inventory [host,group]
       add_host: 
          name: "{{ my_droplet.droplet.ip_address }}"
          groups: "launched"
+         do_droplet_id: "{{ my_droplet.droplet.id }}"
+         do_droplet_ip: "{{ my_droplet.droplet.ip_address }}"
+         do_droplet_name: "{{ my_droplet.droplet.name }}"
          ansible_user: "root"
          ansible_ssh_common_args: "-oStrictHostKeyChecking=no"
          ansible_host_key_checking: False
@@ -184,15 +197,15 @@
            line: "{{ item.line }}"           
       with_items: 
          - regexp: "^#? ?external_url"
-           line: "external_url 'https://{{gitlab_DNS_p}}.{{L3_DNS}}'"
+           line: "external_url 'https://{{do_droplet_name}}.{{L3_DNS}}'"
 
          - regexp: "^#? ?registry_external_url"
-           line: "registry_external_url 'https://{{gitlab_DNS_p}}.{{L3_DNS}}:5005'"
+           line: "registry_external_url 'https://{{do_droplet_name}}.{{L3_DNS}}:5005'"
 
          - regexp: "^#? ?gitlab_rails['registry_enabled']"
            line: "gitlab_rails['registry_enabled'] = true"
          - regexp: "^#? ?gitlab_rails['registry_host']"
-           line: "gitlab_rails['registry_host'] = '{{gitlab_DNS_p}}.{{L3_DNS}}'"
+           line: "gitlab_rails['registry_host'] = '{{do_droplet_name}}.{{L3_DNS}}'"
          - regexp: "^#? ?gitlab_rails['registry_port']"
            line: "gitlab_rails['registry_port'] = '5005'"
          - regexp: "^#? ?gitlab_rails['registry_path']"
