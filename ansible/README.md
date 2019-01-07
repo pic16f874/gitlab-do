@@ -40,11 +40,6 @@ docker run -d \
   registry:2
 
 
-ansible-playbook cr-droplet-gitlab.yml --ask-vault-pass
-
-ansible-playbook cr-droplet-gitlab.yml --vault-password-file datainfo.retry
-ansible-playbook cr-droplet-gitlab.yml --vault-password-file datainfo.retry
-
 # backup system
 sudo gitlab-rake gitlab:backup:create
 /var/opt/gitlab/backups/1546357720_2019_01_01_11.6.1_gitlab_backup.tar
@@ -79,3 +74,9 @@ ssh gitlab.oleryz79.pp.ua "sudo cp -vR  /tmp/gitlab-secrets.json /etc/gitlab/git
 
 sudo gitlab-ctl restart
 sudo gitlab-rake gitlab:check SANITIZE=true
+
+##### RUN playbook #####
+ansible-playbook cr-droplet-gitlab.yml --ask-vault-pass
+ansible-playbook cr-droplet-gitlab.yml --vault-password-file datainfo.pwd
+ansible-playbook cr-droplet-gl-runner.yml --vault-password-file datainfo.pwd
+##### RUN playbook #####
