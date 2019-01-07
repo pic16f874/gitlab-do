@@ -67,3 +67,15 @@ ssh gitlab.oleryz79.pp.ua "sudo cp -vR /var/opt/gitlab/backups /tmp"
 ssh gitlab.oleryz79.pp.ua "sudo chmod -vR 777 /tmp/backups"
 scp gitlab.oleryz79.pp.ua:/tmp/backups/* .
 ssh gitlab.oleryz79.pp.ua "sudo rm -vfR 777 /tmp/backups"
+
+cd ~/github/gitlab-do/ansible
+scp *gitlab_backup.tar gitlab.oleryz79.pp.ua:/tmp
+ssh gitlab.oleryz79.pp.ua "sudo cp -vR  /tmp/*gitlab_backup.tar /var/opt/gitlab/backups"
+
+gitlab-rake gitlab:backup:restore BACKUP=1546370838_2019_01_01_11.6.1
+
+ssh gitlab.oleryz79.pp.ua "sudo cp -vR  /tmp/gitlab-secrets.json /etc/gitlab/gitlab-secrets.json"
+        
+
+sudo gitlab-ctl restart
+sudo gitlab-rake gitlab:check SANITIZE=true

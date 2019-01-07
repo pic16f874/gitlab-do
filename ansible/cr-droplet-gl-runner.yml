@@ -251,7 +251,7 @@
         state: present
       with_items:
           - dopy
-          
+
     - name: "download gitlab installation script "
       get_url: 
           url: "https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh"
@@ -325,9 +325,53 @@
           - "{{ res_recfg.results[0].stdout_lines }}"
 
 
+#sudo usermod -aG docker gitlab-runner
+    - name: Create user gitlab-runner into group docker - 
+      user:
+        name: "gitlab-runner"
+        groups: "docker"  
+        append: yes
 
 
+    - name: "install packages gpg2 for correct work docker login"
+      become: true
+      apt:
+        pkg: "{{item}}"
+        state: present
+      with_items:
+          - gnupg2
+          - pass
 
+    - name: "init gpg2"
+      become: true
+      shell: "{{ item }}"       
+      with_items:
+        - | 
+          HOME=/var/lib/gitlab-runner; pass init `gpg2 --list-secret-keys | grep uid -B 1 | head -n 1`
+     register: res_initgpg2
+
+    - name: Print result of RUN gitlab installation script
+      debug:
+        msg:
+          - "{{ res_initgpg2.results[0].stdout_lines }}"
+
+#https://github.com/docker/compose/issues/6023
+#gnupg2 pass
+#cat >gpg2.tmp <<EOF
+#     %echo Generating a basic OpenPGP key
+#     Key-Type: default
+#     Subkey-Type: default
+#     Name-Real: asdf asdf
+#     Name-Comment: asdf
+#     Name-Email: adsf@asdf.adsf
+#     Expire-Date: 0
+#     Passphrase: asdfasdf
+#     # Do a commit here, so that we can later print "done" :-)
+#     %commit
+#     %echo done
+#EOF
+#gpg2 --batch --generate-key gpg2.tmp
+#HOME=/var/lib/gitlab-runner; pass init `gpg2 --list-secret-keys | grep uid -B 1 | head -n 1`
 
 
 
