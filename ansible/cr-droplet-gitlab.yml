@@ -133,6 +133,16 @@
 #      mount: name=none src=/mnt/4GB.swap fstype=swap opts=sw passno=0 dump=0 state=present
 
 
+    - name: "download zabbix metapackage {{ zbx_repo_pckg }}"
+      get_url: 
+          url: "{{ zbx_repo_path }}{{ zbx_repo_pckg }}"
+          dest: /tmp
+          
+    - name: "install zabbix metapackage {{ zbx_repo_pckg }}"
+      become: true
+      apt: 
+        deb: "/tmp/{{ zbx_repo_pckg }}" 
+          
     - name: "update apt cache"
       become: true
       apt:
@@ -152,6 +162,36 @@
           - postfix
           - curl
           - mc
+          - zabbix-agent 
+          - python3-pip
+
+    - name: "install python packages "
+      become: true
+      pip:
+        name: "{{item}}"
+        state: present
+      with_items:
+          - dopy
+          - pyapi-gitlab
+
+
+    - name: edit /home/kivanov/.local/share/mc/history
+      ini_file:
+           path: /home/kivanov/.local/share/mc/history
+           section: "user-fmt-input"
+           option: "0"
+           value: "half type name |mtime|size|perm|owner|group"
+           backup: yes
+
+    - name: edit /root/.local/share/mc/history
+      ini_file:
+           path: /root/.local/share/mc/history
+           section: "user-fmt-input"
+           option: "0"
+           value: "half type name |mtime|size|perm|owner|group"
+           backup: yes
+
+
           
     - name: "download gitlab installation script "
       get_url: 

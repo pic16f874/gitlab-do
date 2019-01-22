@@ -1,7 +1,11 @@
 - hosts: localhost
   gather_facts: false
   vars:
-    dodropletname: "gl-runner-test"
+    dodropletname: "gl-runner-test2"
+    dodropletzmeta: "pic16f874"
+    gitlab_runner_tags: "mdm-kdl"    
+
+
   tasks:
     - name: add ssh key into digital-ocean 
       digital_ocean:
@@ -95,6 +99,11 @@
       service:
         name: "docker"
         state: "restarted"
+    - name: "Restart zabbix-agent"
+      service:
+        name: "zabbix-agent"
+        state: "restarted"
+
 
   tasks:
     - name: Ensure group kanoadmins exists
@@ -143,6 +152,22 @@
 #         regexp: "^PermitRootLogin"
 #         line: "PermitRootLogin no"
 #      notify: "Restart sshd"
+
+    - name: edit /home/kivanov/.local/share/mc/history
+      ini_file:
+           path: /home/kivanov/.local/share/mc/history
+           section: "user-fmt-input"
+           option: "0"
+           value: "half type name |mtime|size|perm|owner|group"
+           backup: yes
+
+    - name: edit /root/.local/share/mc/history
+      ini_file:
+           path: /root/.local/share/mc/history
+           section: "user-fmt-input"
+           option: "0"
+           value: "half type name |mtime|size|perm|owner|group"
+           backup: yes
 
 
     - name: "create the file to be used for swap" 
@@ -288,6 +313,73 @@
       with_items:
           - gitlab-runner
 
+
+
+
+#sudo usermod -aG docker gitlab-runner
+    - name: add user gitlab-runner into group docker - 
+      user:
+        name: "gitlab-runner"
+        groups: "docker"  
+        append: yes
+
+
+    - name: "install packages gpg2 for correct work docker login"
+      become: true
+      apt:
+        pkg: "{{item}}"
+        state: present
+      with_items:
+          - gnupg2
+          - pass
+
+    - name: "init gpg2"
+      become: true
+      shell: "{{ item }}"       
+      with_items:
+        - | 
+          HOME=/var/lib/gitlab-runner; pass init `gpg2 --list-secret-keys | grep uid -B 1 | head -n 1`
+      register: res_initgpg2
+      ignore_errors: true
+    - name: Print result of RUN gitlab installation script
+      debug:
+        msg:
+          - "{{ res_initgpg2.results[0].stdout_lines }}"
+
+
+#https://github.com/docker/compose/issues/6023
+#gnupg2 pass
+#cat >gpg2.tmp <<EOF
+#     %echo Generating a basic OpenPGP key
+#     Key-Type: default
+#     Subkey-Type: default
+#     Name-Real: asdf asdf
+#     Name-Comment: asdf
+#     Name-Email: adsf@asdf.adsf
+#     Expire-Date: 0
+#     Passphrase: asdfasdf
+#     # Do a commit here, so that we can later print "done" :-)
+#     %commit
+#     %echo done
+#EOF
+#gpg2 --batch --generate-key gpg2.tmp
+#HOME=/var/lib/gitlab-runner; pass init `gpg2 --list-secret-keys | grep uid -B 1 | head -n 1`
+
+
+    - name: "REGISTER gitlab runner"
+      become: true
+      shell: "{{ item }}"       
+      with_items:
+        - | 
+          gitlab-runner register --non-interactive --url "https://gitlab.{{L3_DNS}}" --registration-token "{{gitlab_PROJECT_REGISTRATION_TOKEN}}" --executor "shell" --description "shell-runner" --tag-list "mdm,kdl" --run-untagged --locked="false"
+      register: res_recfg
+      ignore_errors: true
+    - name: Print result of RUN gitlab installation script
+      debug:
+        msg:
+          - "{{ res_recfg.results[0].stdout_lines }}"
+
+
 #    - name: "REGISTER gitlab runner"
 #      become: true
 #      shell: "{{ item }}"       
@@ -311,67 +403,10 @@
 #          - "{{ res_recfg.results[0].stdout_lines }}"
 
 
-    - name: "REGISTER gitlab runner"
-      become: true
-      shell: "{{ item }}"       
-      with_items:
-        - | 
-          gitlab-runner register --non-interactive --url "https://gitlab.{{L3_DNS}}" --registration-token "{{gitlab_PROJECT_REGISTRATION_TOKEN}}" --executor "shell" --description "shell-runner" --run-untagged --locked="false"
-      register: res_recfg
-
-    - name: Print result of RUN gitlab installation script
-      debug:
-        msg:
-          - "{{ res_recfg.results[0].stdout_lines }}"
 
 
-#sudo usermod -aG docker gitlab-runner
-    - name: Create user gitlab-runner into group docker - 
-      user:
-        name: "gitlab-runner"
-        groups: "docker"  
-        append: yes
 
 
-    - name: "install packages gpg2 for correct work docker login"
-      become: true
-      apt:
-        pkg: "{{item}}"
-        state: present
-      with_items:
-          - gnupg2
-          - pass
-
-    - name: "init gpg2"
-      become: true
-      shell: "{{ item }}"       
-      with_items:
-        - | 
-          HOME=/var/lib/gitlab-runner; pass init `gpg2 --list-secret-keys | grep uid -B 1 | head -n 1`
-     register: res_initgpg2
-
-    - name: Print result of RUN gitlab installation script
-      debug:
-        msg:
-          - "{{ res_initgpg2.results[0].stdout_lines }}"
-
-#https://github.com/docker/compose/issues/6023
-#gnupg2 pass
-#cat >gpg2.tmp <<EOF
-#     %echo Generating a basic OpenPGP key
-#     Key-Type: default
-#     Subkey-Type: default
-#     Name-Real: asdf asdf
-#     Name-Comment: asdf
-#     Name-Email: adsf@asdf.adsf
-#     Expire-Date: 0
-#     Passphrase: asdfasdf
-#     # Do a commit here, so that we can later print "done" :-)
-#     %commit
-#     %echo done
-#EOF
-#gpg2 --batch --generate-key gpg2.tmp
-#HOME=/var/lib/gitlab-runner; pass init `gpg2 --list-secret-keys | grep uid -B 1 | head -n 1`
 
 
 
@@ -384,31 +419,51 @@
 
 
 
-#    - name: "download zabbix metapackage {{ zbx_repo_pckg }}"
-#      get_url: 
-#          url: "{{ zbx_repo_path }}{{ zbx_repo_pckg }}"
-#          dest: /tmp
+    - name: "download zabbix metapackage {{ zbx_repo_pckg }}"
+      get_url: 
+          url: "{{ zbx_repo_path }}{{ zbx_repo_pckg }}"
+          dest: /tmp
           
-#    - name: "install zabbix metapackage {{ zbx_repo_pckg }}"
-#      become: true
-#      apt: 
-#        deb: "/tmp/{{ zbx_repo_pckg }}" 
+    - name: "install zabbix metapackage {{ zbx_repo_pckg }}"
+      become: true
+      apt: 
+        deb: "/tmp/{{ zbx_repo_pckg }}" 
           
-#    - name: "update apt cache"
-#      become: true
-#      apt:
-#        update_cache: yes
-#        cache_valid_time: 86400 #One day
+    - name: "update apt cache"
+      become: true
+      apt:
+        update_cache: yes
+        cache_valid_time: 86400 #One day
 
-#    - name: "install zabbix packages {{ zbx_repo_pckg }}"
-#      become: true
-#      apt:
-#        pkg: "{{item}}"
-#        state: present
-#      with_items:
+    - name: "install zabbix packages {{ zbx_repo_pckg }}"
+      become: true
+      apt:
+        pkg: "{{item}}"
+        state: present
+      with_items:
 #          - zabbix-server-mysql
 #          - zabbix-frontend-php 
-#          - zabbix-agent 
+          - zabbix-agent 
+
+
+    - name: edit /etc/zabbix/zabbix_agentd.conf 
+      lineinfile: 
+           dest: /etc/zabbix/zabbix_agentd.conf 
+           regexp: "{{ item.regexp }}"
+           line: "{{ item.line }}"           
+      with_items: 
+#         - regexp: "^#? ?DBName="
+#           line: "DBName={{ zabbix_db_name }}"
+         - regexp: "Server="
+           line: "Server=zabbix40.pic16f874.pp.ua"
+         - regexp: "ServerActive="
+           line: "ServerActive=zabbix40.pic16f874.pp.ua"
+         - regexp: "Hostname="
+           line: "Hostname={{ do_droplet_name }}"
+#         - regexp: "^#? ?HostMetadata="
+#           line: "HostMetadata={{ dodropletzmeta }}"
+      notify: "Restart zabbix-agent"
+
 
 #    - name: "install zabbix packages"
 #      become: true
