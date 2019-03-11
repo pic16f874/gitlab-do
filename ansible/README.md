@@ -77,6 +77,7 @@ sudo gitlab-rake gitlab:check SANITIZE=true
 
 ##### RUN playbook #####
 ansible-playbook cr-droplet-gitlab.yml --ask-vault-pass
-ansible-playbook cr-droplet-gitlab.yml --vault-password-file datainfo.pwd
-ansible-playbook cr-droplet-gl-runner.yml --vault-password-file datainfo.pwd
+
+ansible-playbook cr-droplet-gl-runner.yml --vault-password-file ../../datainfo.pwd
+ansible-playbook cr-droplet-gitlab.yml --vault-password-file ../../datainfo.pwd
 ##### RUN playbook #####

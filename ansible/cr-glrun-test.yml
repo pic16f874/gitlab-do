@@ -3,9 +3,6 @@
   vars:
     dodropletname: "gl-runner-test"
     dodropletzmeta: "pic16f874"
-    gitlab_runner_tags: "mdm-kdl"    
-
-
   tasks:
     - name: add ssh key into digital-ocean 
       digital_ocean:
@@ -385,7 +382,7 @@
       shell: "{{ item }}"       
       with_items:
         - | 
-          gitlab-runner register --non-interactive --url "https://gitlab.{{L3_DNS}}" --registration-token "{{gitlab_PROJECT_REGISTRATION_TOKEN}}" --executor "shell" --description "shell-runner" --tag-list "mdm,kdl" --run-untagged --locked="false"
+          gitlab-runner register --non-interactive --url "https://gitlab.{{L3_DNS}}" --registration-token "{{gitlab_PROJECT_REGISTRATION_TOKEN}}" --executor "shell" --description "shell-runner" --tag-list "do,test,mdm" --run-untagged --locked="false"
       register: res_recfg
       ignore_errors: true
     - name: Print result of RUN gitlab installation script

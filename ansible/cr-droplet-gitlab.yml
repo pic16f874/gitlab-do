@@ -275,9 +275,9 @@
 #gitlab_rails['registry_key_path'] = '/var/opt/gitlab/gitlab-rails/certificate.key'
 #gitlab_rails['registry_issuer'] = 'omnibus-gitlab-issuer'
 
-
-
-
+    - name: "wait 10s"
+      pause:
+        seconds: 10
 
     - name: "RUN gitlab reconfigure"
       become: true

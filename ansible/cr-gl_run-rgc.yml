@@ -1,9 +1,9 @@
 - hosts: localhost
   gather_facts: false
   vars:
-    dodropletname: "gl-runner-test"
+    dodropletname: "gl-runner-rgc"
     dodropletzmeta: "pic16f874"
-    gitlab_runner_tags: "mdm-kdl"    
+    gitlab_runner_tags: "mdm-rgc"    
 
 
   tasks:
@@ -31,7 +31,7 @@
             region_id: "{{ doregion }}"
             ssh_key_ids: "{{ my_key.ssh_key.id }}"
             image_id: Ubuntu-18-04-x64
-            size_id: s-1vcpu-1gb
+            size_id: s-2vcpu-2gb
 #            size_id: s-1vcpu-3gb
 #            size_id: s-2vcpu-4gb
 #            image_id: gitlab-18-04
@@ -385,13 +385,52 @@
       shell: "{{ item }}"       
       with_items:
         - | 
-          gitlab-runner register --non-interactive --url "https://gitlab.{{L3_DNS}}" --registration-token "{{gitlab_PROJECT_REGISTRATION_TOKEN}}" --executor "shell" --description "shell-runner" --tag-list "mdm,kdl" --run-untagged --locked="false"
+          gitlab-runner register --non-interactive --url "https://gitlab.{{L3_DNS}}" --registration-token "{{gitlab_PROJECT_REGISTRATION_TOKEN}}" --executor "shell" --description "shell-runner" --tag-list "mdm,rgc" --run-untagged --locked="false"
       register: res_recfg
       ignore_errors: true
     - name: Print result of RUN gitlab installation script
       debug:
         msg:
           - "{{ res_recfg.results[0].stdout_lines }}"
+
+
+    - name: "Add /root/lic/"
+      lineinfile:
+         dest: "/root/lic/kanoMDM.key"
+         state: "present"
+         create: yes
+         insertbefore: BOF
+         line: "[mdm]"
+
+    - name: copy license files
+      copy: 
+         src: /home/kivanov/lic/cache.key
+         dest: /root/lic/cache.key
+         owner: root
+         group: root
+         mode: 0644
+
+    - name: copy license files
+      copy: 
+         src: /home/kivanov/lic/kanoMDM.key
+         dest: /root/lic/kanoMDM.key
+         owner: root
+         group: root
+         mode: 0644
+
+
+#    - name: "Allow admin users to sudo without a password"
+#      lineinfile:
+#        dest: "/etc/sudoers.d/kanoadm"
+#        state: "present"
+#        create: yes
+#        insertbefore: BOF
+#        line: "%{{ admin_group_name }} ALL=(ALL) NOPASSWD: ALL"
+#        validate: '/usr/sbin/visudo -cf %s'
+
+
+
+
 
 
 #    - name: "REGISTER gitlab runner"
